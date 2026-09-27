@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Smart Home Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-5px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Paho MQTT Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+</head>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen transition-colors duration-500 font-sans flex flex-col justify-between">
+
+    <!-- Header / Navbar -->
+    <header class="w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-md sticky top-0 z-50 px-6 py-4 flex justify-between items-center transition-colors duration-500">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg shadow-indigo-500/30 animate-float">
+                <i class="fa-solid fa-house-chimney-user text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-xl tracking-tight bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">Luna Smart Home</h1>
+                <p class="text-xs text-slate-400 font-medium">ESP32-S3 IoT Enterprise Control</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <!-- Status Koneksi MQTT -->
+            <div id="connectionStatus" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 text-xs font-semibold border border-amber-200 dark:border-amber-900/50">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                <span id="statusText">Menghubungkan...</span>
+            </div>
+
+            <!-- Tombol Light/Dark Mode -->
+            <button onclick="toggleDarkMode()" class="p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:scale-105 active:scale-95 transition-all shadow-inner">
+                <i id="themeIcon" class="fa-solid fa-moon text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl w-full mx-auto px-6 py-10 flex-grow">
+        
+        <!-- Status Banner -->
+        <div class="mb-8 p-6 rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden flex flex-col sm:flex-row justify-between items-center">
+            <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="mb-4 sm:mb-0 text-center sm:text-left">
+                <h2 class="text-2xl font-extrabold tracking-wide">Kontrol Ruangan Utama</h2>
+                <p class="text-indigo-100 text-sm mt-1">Kelola perangkat lampu rumah Anda secara real-time dari mana saja.</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 text-center">
+                <span class="block text-xs uppercase tracking-wider text-indigo-200 font-semibold">Total Lampu Aktif</span>
+                <span id="activeCount" class="text-2xl font-black">0 / 4</span>
+            </div>
+        </div>
+
+        <!-- Grid Lampu (4 Lampu) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            
+            <!-- Lampu 1 -->
+            <div class="group bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-lg border border-slate-200/60 dark:border-slate-800/80 hover:shadow-2xl hover:border-indigo-500/50 transition-all duration-300 relative overflow-hidden">
+                <div id="cardGlow1" class="absolute -inset-px bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"></div>
+                <div class="flex justify-between items-start mb-6">
+                    <div id="iconBg1" class="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">
+                        <i class="fa-solid fa-lightbulb text-2xl"></i>
+                    </div>
+                    <span id="badge1" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">MATI</span>
+                </div>
+                <h3 class="text-lg font-bold mb-1">Lampu 1</h3>
+                <p class="text-xs text-slate-400 mb-6 font-mono">Topik: esp32s3/lampu1/luna</p>
+                <button onclick="toggleLamp(1)" id="btn1" class="w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white active:scale-95 transition-all shadow-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-power-off"></i>
+                    <span id="btnText1">Nyalakan</span>
+                </button>
+            </div>
+
+            <!-- Lampu 2 -->
+            <div class="group bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-lg border border-slate-200/60 dark:border-slate-800/80 hover:shadow-2xl hover:border-indigo-500/50 transition-all duration-300 relative overflow-hidden">
+                <div id="cardGlow2" class="absolute -inset-px bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"></div>
+                <div class="flex justify-between items-start mb-6">
+                    <div id="iconBg2" class="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">
+                        <i class="fa-solid fa-lightbulb text-2xl"></i>
+                    </div>
+                    <span id="badge2" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">MATI</span>
+                </div>
+                <h3 class="text-lg font-bold mb-1">Lampu 2</h3>
+                <p class="text-xs text-slate-400 mb-6 font-mono">Topik: esp32s3/lampu2/luna</p>
+                <button onclick="toggleLamp(2)" id="btn2" class="w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white active:scale-95 transition-all shadow-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-power-off"></i>
+                    <span id="btnText2">Nyalakan</span>
+                </button>
+            </div>
+
+            <!-- Lampu 3 -->
+            <div class="group bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-lg border border-slate-200/60 dark:border-slate-800/80 hover:shadow-2xl hover:border-indigo-500/50 transition-all duration-300 relative overflow-hidden">
+                <div id="cardGlow3" class="absolute -inset-px bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"></div>
+                <div class="flex justify-between items-start mb-6">
+                    <div id="iconBg3" class="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">
+                        <i class="fa-solid fa-lightbulb text-2xl"></i>
+                    </div>
+                    <span id="badge3" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">MATI</span>
+                </div>
+                <h3 class="text-lg font-bold mb-1">Lampu 3</h3>
+                <p class="text-xs text-slate-400 mb-6 font-mono">Topik: esp32s3/lampu3/luna</p>
+                <button onclick="toggleLamp(3)" id="btn3" class="w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white active:scale-95 transition-all shadow-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-power-off"></i>
+                    <span id="btnText3">Nyalakan</span>
+                </button>
+            </div>
+
+            <!-- Lampu 4 -->
+            <div class="group bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-lg border border-slate-200/60 dark:border-slate-800/80 hover:shadow-2xl hover:border-indigo-500/50 transition-all duration-300 relative overflow-hidden">
+                <div id="cardGlow4" class="absolute -inset-px bg-gradient-to-r from-indigo-500 to-purple-500 rounded-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"></div>
+                <div class="flex justify-between items-start mb-6">
+                    <div id="iconBg4" class="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">
+                        <i class="fa-solid fa-lightbulb text-2xl"></i>
+                    </div>
+                    <span id="badge4" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300">MATI</span>
+                </div>
+                <h3 class="text-lg font-bold mb-1">Lampu 4</h3>
+                <p class="text-xs text-slate-400 mb-6 font-mono">Topik: esp32s3/lampu4/luna</p>
+                <button onclick="toggleLamp(4)" id="btn4" class="w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white active:scale-95 transition-all shadow-sm flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-power-off"></i>
+                    <span id="btnText4">Nyalakan</span>
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 text-xs text-slate-400 border-t border-slate-200 dark:border-slate-900">
+        &copy; 2026 Luna Smart Home System. Powered by HiveMQ Cloud & Tailwind CSS.
+    </footer>
+
+    <!-- Skrip MQTT & Interaksi -->
+    <script>
+        // Konfigurasi Dark/Light Mode
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                icon.className = "fa-solid fa-sun text-lg";
+            } else {
+                html.classList.add('dark');
+                icon.className = "fa-solid fa-moon text-lg";
+            }
+        }
+
+        // Variabel Status Lampu (1 sampai 4)
+        let lampStates = [false, false, false, false];
+
+        // Konfigurasi MQTT Client via WebSocket (HiveMQ Cloud)[cite: 2]
+        const host = "b2bc432662694880b05ad2910b686fe1.s1.eu.hivemq.cloud"; //[cite: 2]
+        const port = 8884; // Port WebSocket[cite: 2]
+        const clientId = "web_client_" + Math.random().toString(16).substring(2, 8);
+        
+        let client = new Paho.MQTT.Client(host, Number(port), "/mqtt", clientId);
+
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        // Hubungkan ke Broker dengan Kredensial Luna
+        client.connect({
+            useSSL: true,
+            userName: "luna",
+            password: "lunapunyagalang",
+            onSuccess: onConnect,
+            onFailure: onFailure
+        });
+
+        function onConnect() {
+            console.log("Terhubung ke MQTT Broker!");
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 text-xs font-semibold border border-emerald-200 dark:border-emerald-900/50";
+            statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>Terhubung (Online)</span>';
+
+            // Subscribe topik kontrol & status
+            for (let i = 1; i <= 4; i++) {
+                client.subscribe(`esp32s3/lampu${i}/luna`);
+            }
+        }
+
+        function onFailure(message) {
+            console.log("Koneksi Gagal: " + message.errorMessage);
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 text-xs font-semibold border border-rose-200 dark:border-rose-900/50";
+            statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span><span>Gagal Terhubung</span>';
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Koneksi terputus: " + responseObject.errorMessage);
+                onFailure({ errorMessage: responseObject.errorMessage });
+                // Coba hubungkan ulang otomatis setelah 5 detik
+                setTimeout(() => {
+                    client.connect({
+                        useSSL: true,
+                        userName: "luna",
+                        password: "lunapunyagalang",
+                        onSuccess: onConnect,
+                        onFailure: onFailure
+                    });
+                }, 5000);
+            }
+        }
+
+        function onMessageArrived(message) {
+            console.log("Pesan diterima: " + message.destinationName + " -> " + message.payloadString);
+            for (let i = 1; i <= 4; i++) {
+                if (message.destinationName === `esp32s3/lampu${i}/luna`) {
+                    let state = message.payloadString === "1";
+                    updateUI(i, state);
+                }
+            }
+        }
+
+        function toggleLamp(id) {
+            let index = id - 1;
+            let newState = !lampStates[index];
+            let payload = newState ? "1" : "0";
+
+            message = new Paho.MQTT.Message(payload);
+            message.destinationName = `esp32s3/lampu${id}/luna`;
+            client.send(message);
+        }
+
+        function updateUI(id, state) {
+            let index = id - 1;
+            lampStates[index] = state;
+
+            let iconBg = document.getElementById(`iconBg${id}`);
+            let badge = document.getElementById(`badge${id}`);
+            let btn = document.getElementById(`btn${id}`);
+            let btnText = document.getElementById(`btnText${id}`);
+            let cardGlow = document.getElementById(`cardGlow${id}`);
+
+            if (state) {
+                // Kondisi HIDUP (ON)
+                iconBg.className = "p-4 rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-500/30 transition-colors duration-300 animate-bounce";
+                setTimeout(() => iconBg.classList.remove('animate-bounce'), 1000);
+                badge.className = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900 transition-colors duration-300";
+                badge.innerText = "MENYALA";
+                btn.className = "w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-rose-500 hover:bg-rose-600 text-white active:scale-95 transition-all shadow-md shadow-rose-500/20 flex items-center justify-center space-x-2";
+                btnText.innerText = "Matikan";
+                cardGlow.style.opacity = "0.4";
+            } else {
+                // Kondisi MATI (OFF)
+                iconBg.className = "p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300";
+                badge.className = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-300";
+                badge.innerText = "MATI";
+                btn.className = "w-full py-3.5 px-4 rounded-2xl font-semibold tracking-wide bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white active:scale-95 transition-all shadow-sm flex items-center justify-center space-x-2";
+                btnText.innerText = "Nyalakan";
+                cardGlow.style.opacity = "0";
+            }
+
+            // Hitung total lampu aktif
+            let activeTotal = lampStates.filter(s => s).length;
+            document.getElementById('activeCount').innerText = `${activeTotal} / 4`;
+        }
+    </script>
+</body>
+</html>
